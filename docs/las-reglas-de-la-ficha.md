@@ -1,6 +1,6 @@
 # Las Reglas de la Ficha
 
-*Versión: 3.1 — última edición: 2 de agosto, 2026*
+*Versión: 4.0 — última edición: 2 de agosto, 2026*
 
 *Documento técnico de reglas — contrato del motor de juego (Fase 1). Cualquier ambigüedad de implementación debe resolverse consultando este documento, no asumiendo.*
 
@@ -18,6 +18,17 @@
   - El equipo **perdedor** hace la sopa (revuelve las fichas).
   - El equipo **ganador** levanta/escoge sus 7 fichas primero.
   - El equipo ganador decide cuál de los dos compañeros pone la ficha de salida. Esta decisión se puede tomar **en voz alta y abiertamente frente al rival** (ej. "¿sales o salgo?"/"sal tú"). Lo que no se vale es comunicarlo mediante gestos, ademanes o señales no verbales que den información sobre qué fichas tiene cada quien o con qué número convendría o no salir — la pregunta y respuesta en sí son públicas, la lógica detrás de la decisión no se puede señalar de forma encubierta.
+
+### Regla de orientación de la ficha de salida
+
+Cuando se coloca la ficha de salida (la primera de la partida), el jugador tiene libertad de elegir cuál de sus dos números queda orientado hacia cada lado — a diferencia de cualquier ficha jugada después, cuya orientación queda forzada por el extremo al que se pega. Esa libertad, sin regla, sería una posible vía de señal ilegal (ej. orientar deliberadamente un número hacia el compañero para insinuar que se tienen varias fichas de ese número).
+
+**Regla fija:** el número de **mayor valor** de la ficha de salida siempre se coloca orientado hacia el compañero (el jugador sentado enfrente), sin excepción y sin importar la mano que se tenga. Esto elimina la discrecionalidad y, con ella, la posibilidad de usar la orientación como señal.
+
+- Ejemplo: si la ficha de salida es 3-5, el 5 va hacia el compañero; el 3 queda hacia el lado contrario. Esto aplica siempre, independientemente de qué fichas tenga el jugador en mano.
+- Para dobles (ej. 4-4) no aplica distinción, ya que ambos extremos muestran el mismo número.
+
+**Implicación de diseño (Fase 3):** la UI debe calcular automáticamente la orientación correcta de la ficha de salida según esta regla — no debe ser una decisión libre del jugador en la interfaz, ni siquiera visualmente.
 
 ## Jugada legal
 
@@ -237,6 +248,16 @@ Esta sección recoge principios tácticos tradicionales del dominó, expresados 
 - **"Para cerrar, saca la cuenta, no la corazonada"** → fórmula concreta (168 − pintas jugadas, entre dos) que la IA Experto/Máster puede usar como umbral de decisión para intentar cerrar o no. Útil también como pregunta gamificada del modo aprendizaje.
 - **"Pensarle mucho a una sola opción es trampa disfrazada"** → refuerza la nota de tempo tell ya documentada; confirma que es un principio tradicional reconocido, no una ocurrencia del proyecto.
 - **"Nadie manda foto de su mano"** → refuerza la sección de Penalizaciones ya documentada.
+
+## Distribución física en mesa — "escuadras" (nota de diseño visual, Fase 3)
+
+Esta sección **no afecta la lógica del motor** (Fase 1) — el motor solo necesita conocer los dos valores de los extremos abiertos de la fila, sin importar su representación geométrica. Es una nota de autenticidad visual para cuando se diseñe la interfaz.
+
+- En una mesa física, las fichas no se extienden en línea recta indefinidamente — la mesa (tradicionalmente cuadrada) no tiene espacio. Por convención informal (no es regla fija), cuando la fila alcanza un extremo de la mesa (aproximadamente cada 4-6 fichas), el jugador que tira en ese momento coloca su ficha "en escuadra": gira la dirección de la fila 90°, siempre **en contra de las manecillas del reloj** — el mismo sentido en que avanza el turno.
+- Si la fila vuelve a alcanzar otro extremo tras la primera escuadra (unas 3-4 fichas más), se repite el giro en el mismo sentido.
+- El propósito es puramente práctico: mantener el juego dentro del alcance físico de todos los jugadores.
+
+**Implicación de diseño (Fase 3):** si se busca una representación visual auténtica de una mesa física, la UI puede simular este comportamiento de "espiral" en vez de una fila recta — pero es una decisión estética, no funcional. El modelo de datos del motor (Fase 1) no necesita saber nada de esto.
 
 ## Ideas futuras (fuera de alcance actual — NO implementar aún)
 
