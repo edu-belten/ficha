@@ -1,5 +1,7 @@
 # Las Reglas de la Ficha
 
+*Versión: 3.1 — última edición: 2 de agosto, 2026*
+
 *Documento técnico de reglas — contrato del motor de juego (Fase 1). Cualquier ambigüedad de implementación debe resolverse consultando este documento, no asumiendo.*
 
 ## Setup
@@ -142,6 +144,99 @@ El dominó tiene vocabulario propio que varía por país/región — parte del s
 - **Modelo de datos:** el glosario debe vivir como una estructura de datos simple (término, región, significado, quizás ficha/situación asociada), no hardcodeado en la UI, para poder ampliarlo fácilmente sin tocar código de interfaz.
 - **Fase 3 (UI):** se puede integrar como parte del modo aprendizaje (ej. "dato curioso" al cerrar con una mula: "¡Cerraste con la pecosa! Así le dicen en México a la mula de 6") o como sección de exploración/glosario independiente.
 - Encaja bien con el mismo sistema de gamificación de la sección de conteo/probabilidades — mismo patrón de "aprendizaje divertido integrado al juego", no separado de él.
+
+## Principios tácticos (no son reglas — insumo para diseño de Game AI)
+
+Esta sección **no modifica el motor de reglas** — son principios de estrategia tradicionales del dominó de pareja, documentados aquí porque son el insumo directo para diseñar el comportamiento de los niveles Medio/Experto/Máster de la Game AI en Fase 2. El motor no necesita "saber" estos conceptos por nombre, pero la lógica de decisión de la IA sí debe reflejarlos.
+
+### Las Tres Erres (versión cantinera — la adoptada para este proyecto)
+
+Existe una versión más formal/tradicional (respetar, repetir, recordar), pero para este documento se adopta la **versión cantinera**, más alineada al tono competitivo-amistoso del proyecto:
+
+- **Respetar la mano:** jugar de acuerdo con la salida o la ficha que puso tu compañero, apoyando su estrategia o el palo fuerte que demostró tener.
+- **Repite la ficha:** volver a jugar un número o palo que ya jugaste antes, para indicarle a tu compañero que tienes más fichas de ese mismo grupo.
+- **"Rechinga" al de al lado:** una vez identificado qué fichas le "duelen" al rival que juega después de ti, seguir explotando eso — poner fichas que no tenga o que lo fuercen a tirar mal, sacándolo de su plan de juego.
+
+### Las Nueve Erres (tácticas reiterables — autor venezolano)
+
+Un desglose más granular de las mismas ideas, en nueve verbos. Referencia consultada: *Domino sin barreras*, Delgado Alvarado, Luis. Editorial C.G.C., Los libros de El Nacional, pág. 74, 2006. Redactado/ilustrado por Oussi.
+
+- **Reconstruir:** rehacer mentalmente cada ficha puesta por el compañero y los adversarios, sobre todo en la primera y segunda ronda.
+- **Resolver:** ligado a lo anterior — deducir la mejor jugada posible.
+- **Reiterar:** reproducir las propias pintas (jugar del mismo palo propio repetidamente).
+- **Repetir:** reiterar las pintas del compañero (mismo concepto que "repite la ficha" arriba).
+- **Requerir:** provocar, buscar o "imantar" fichas deseables del resto de la mesa.
+- **Respetar:** las pintas propias y las del compañero.
+- **Reprimir:** golpear, castigar u obstruir las pintas ajenas (del rival).
+- **Renegar:** negar las pintas ajenas — evitar deliberadamente dar fichas que le convengan al rival.
+- **Restringir:** anular o sofocar las pintas ajenas mediante jugadas que impidan que el rival las reitere.
+
+**Implicación de diseño (Fase 2):** estos nueve verbos se mapean de forma natural a las capacidades ya planeadas por nivel de IA:
+- *Reconstruir/Resolver* → el motor de inferencia probabilística (ya documentado en la sección de conteo/hints), reutilizado como cerebro de decisión del nivel Experto.
+- *Reiterar/Repetir/Respetar* → lógica de coordinación con el compañero (relevante sobre todo para el nivel Máster, que debe leer intenciones del compañero humano).
+- *Requerir/Reprimir/Renegar/Restringir* → lógica ofensiva contra el rival (evitar darle fichas convenientes, forzarlo a pasar, bloquear sus palos fuertes) — el diferenciador principal entre un nivel Medio (juega bien su propia mano) y un nivel Experto/Máster (juega activamente en contra de la mano ajena).
+
+### Manejo de pintas según el rol — mano vs. seguidor (avanzado)
+
+Este principio **no es regla y no siempre aplica** — se ejecuta solo cuando la mano del jugador lo permite, es decir, cuando tiene margen para elegir entre varias fichas jugables legales. Es una decisión de optimización hacia el marcador acumulado (los 100 puntos), no hacia ganar la partida individual a toda costa.
+
+- **Cuando el equipo tiene la mano (salió):** conviene jugar fichas de valor **bajo** cuando hay alternativa legal. La lógica: mientras más tiempo el rival se quede cargando sus fichas de valor **alto**, más puntos va a sumar el equipo propio si logra cerrar o ganar por tranca — la derrota del rival, si ocurre, vale más.
+- **Cuando el equipo es seguidor (no salió, y por tanto tiene estadísticamente más probabilidad de perder esa partida):** conviene jugar fichas de valor **alto** cuando hay alternativa legal. La lógica: al deshacerse pronto de las pintas más pesadas, si el equipo termina perdiendo, la derrota pesa menos puntos hacia el acumulado.
+
+**Implicación de diseño (Fase 2):** este principio requiere que la Game AI (niveles Experto/Máster) evalúe, en cada turno con más de una jugada legal disponible, no solo "¿qué ficha me conviene por posición en la mesa?" sino "¿qué ficha me conviene por rol (mano/seguidor) pensando en el valor de las fichas que me quedan y las del rival?". Es una capa de decisión adicional sobre la lógica básica de jugada legal — se evalúa **después** de filtrar jugadas legales, como criterio de desempate/priorización entre ellas, no como regla de legalidad.
+
+### Cuadrar la ficha del compañero (proactivo — ataque y apoyo a la vez)
+
+Este principio es distinto de "respetar la mano" (que es reactivo — jugar de acuerdo a lo que el compañero ya mostró). Aquí se trata de una jugada **proactiva basada en inferencia**, y tiene un componente ofensivo, no solo de apoyo.
+
+**El mecanismo específico:** cuando se infiere (por fichas jugadas, pases declarados, o lectura de la partida) que el compañero tiene varias fichas de un número determinado (ej. varios "tres"), y ese número ya está expuesto en **uno** de los dos extremos de la mesa, la jugada deseable —cuando la mano lo permite— **no es tapar/cerrar ese extremo**, sino colocar una ficha que haga que el **otro extremo también quede en ese mismo número**. Es decir, "cuadrar la mesa a tres" en ambas puntas.
+
+**Por qué funciona como ataque:** con ambos extremos mostrando el mismo número, el equipo rival necesita tener fichas de ese número específico para poder jugar en cualquiera de las dos puntas — reduce sus jugadas legales posibles a un solo palo, lo cual aumenta considerablemente la probabilidad de que alguno de ellos tenga que pasar. Si el rival pasa, el compañero (que se infiere fuerte en ese número) va a tener una jugada casi garantizada y sin presión en su siguiente turno.
+
+- Es diferente a simplemente seguir el palo que el compañero ya jugó — es anticiparse a lo que probablemente tiene y usarlo para estrechar las opciones del rival, no solo para "dejarle pasar la ficha".
+- Requiere el mismo motor de inferencia probabilística ya documentado (sección de conteo/hints) — no es una regla nueva de datos, es un uso adicional de la misma información, ahora aplicado a ambos extremos de la mesa simultáneamente.
+
+**Implicación de diseño (Fase 2):** este es uno de los comportamientos que más separa a un nivel Máster de un Experto — el Experto ya usa el motor de inferencia para jugar contra el rival (bloquear, no regalar), pero el Máster además combina esa misma inferencia con el estado de **ambos extremos de la mesa** para maximizar la probabilidad de pase del rival mientras beneficia al compañero. La lógica de decisión del Máster necesita, entre las jugadas legales disponibles, evaluar explícitamente: "¿existe una jugada que iguale el otro extremo al número que infiero fuerte en mi compañero?" — y priorizarla sobre otras jugadas legales que no tengan ese efecto combinado de ataque + apoyo.
+
+## Refranes y sabiduría tradicional (adaptados a tono MX/Caribe)
+
+Esta sección recoge principios tácticos tradicionales del dominó, expresados como refranes. Los principios de fondo están inspirados en la tradición oral del dominó de mesa (ver fuente abajo), pero **las frases fueron redactadas de nuevo** en tono mexicano/centroamericano/caribeño para el proyecto — no es traducción literal del español ibérico del documento original.
+
+*Fuente de los principios (adaptados, no citados textualmente): Rodríguez Iglesias, David. "Refranes de dominó comentados". Paremia, 11, 2002. Madrid.*
+
+| Dicho (estilo cantinero) | Principio detrás |
+|---|---|
+| "El que cierra a blancas, cierra con gracia." | Cerrar la partida con fichas de bajo valor (blancas/números bajos) suele favorecer al que cierra — deja poca pinta en la mesa. |
+| "Con talento y ojo pelón, ganas ocho de diez — las otras dos son de Dios." | La habilidad importa mucho, pero la suerte sigue siendo un factor real (~40% según la tradición) — ni el mejor jugador gana siempre. |
+| "El que cuenta aprisa, cuenta mal." | Contar puntos con descuido lleva a errores frecuentes; la buena cuenta se hace con calma, no de volada. |
+| "A la salida del compa, no le busques ni tantito lío." | Jugar acorde a lo que salió tu compañero, respetando el palo que mostró tener, en vez de ir en tu propia onda. |
+| "Con cinco o seis del mismo palo, ni Dios te manda a respetar la mano." | Si traes muchas fichas de un mismo número, no estás obligado a seguir ciegamente la salida del compañero — tu palo fuerte manda. |
+| "Cuidar al compa es tu chamba número uno." | Ayudar al compañero es la esencia misma del dominó en pareja — más importante que lucirte tú solo. |
+| "Doble grande que sale solo, sale caro." | Salir con un doble alto (mula) sin acompañamiento suele ser mala jugada — mejor esperar a tener con qué respaldarlo. |
+| "Salida pelada, no te la creas ni truncada." | Si el rival no tapó bien su salida, sospecha — puede ser trampa para hacerte caer. |
+| "Al doble se lo cargan de primero, o luego cobra factura." | Los dobles altos conviene soltarlos pronto — si te los quedas cargando, terminan pesándote en la cuenta. |
+| "Lo que no repites, no lo pides prestado." | Repetir el palo que ya jugaste (o que jugó tu compañero) le informa qué tienes; hacerlo con orden evita mandar señales contradictorias. |
+| "La salida se mata, tengas para matarla o no." | Es casi ley no escrita: hay que intentar anular la salida del rival, aunque sea con lo poquito que tengas. |
+| "La ficha que vas a poner, ya la debes traer pensada." | Un buen jugador anticipa mentalmente su jugada antes de que le toque turno, leyendo cómo ha ido la mano. |
+| "Al compa se le cuida la jugada, no nomás la propia." | Buscar activamente fichas que le convengan al compañero, no solo pensar en tu mano. |
+| "Pensarle mucho a una sola opción es trampa disfrazada." | Dudar cuando en realidad solo tienes una ficha jugable es señal desleal — comunica falsa complejidad al resto de la mesa (ver también la nota de "tempo tell" arriba). |
+| "Ficha nueva sin necesidad, es regalo a la mala." | Abrir un palo que nadie ha jugado todavía, sin necesidad, arriesga regalarle fichas fáciles al rival. |
+| "Fichas paradas, juego honrado; fichas escondidas, jugada de villano." | Las fichas deben estar siempre visibles para todos en la mesa — ocultarlas (con la mano o de cualquier forma) es trampa, no viveza. |
+| "Ahorca el doble seis, que ese sí duele." | Bloquear (dejar sin salida) los dobles más altos del rival es de las jugadas más satisfactorias y efectivas del juego. |
+| "El que sale, que mate su propia salida." | Si tú abriste la mano, te conviene poder anular tu propia ficha de salida — no hacerlo es tirar la ventaja. |
+| "Repite como gallo en la madrugada, aunque a veces te quedes trabado." | Insistir con el mismo palo presiona al rival de tu derecha a jugar incómodo o pasar, aunque a veces tú mismo te quedes sin jugada por hacerlo. |
+| "Nadie manda foto de su mano — ni con gestos, ni de a feo." | Nunca reveles ni ayudes a inferir tu mano fuera de lo permitido (jugadas y respuestas públicas, no señas — ver sección de Penalizaciones). |
+| "Para cerrar, saca la cuenta, no la corazonada." | Antes de cerrar, hay que contar: sumar las pintas ya jugadas, restarlas del total de 168 puntos del juego completo, y dividir el resto entre dos — si crees tener más de la mitad de lo que falta, mejor no cerrar. |
+| "En los últimos tantos, se juega como chacal — con hambre y con cuidado." | Cerca del final del marcador (cerca de los 100), la atención y el cuidado en cada jugada deben extremarse. |
+| "Si al compa le faltan fichas, hasta la mula se sacrifica." | Cuando el compañero es quien trae la mano más corta (menos fichas), vale la pena sacrificar hasta un doble propio para ayudarlo a cerrar. |
+| "Jugada forzada no se regaña." | No se le reclama al compañero por una jugada que no tenía de otra — reprochar jugadas obligadas es de mal jugador. |
+| "Al que anota, se le checa la cuenta." | Quien lleva el conteo de puntos puede equivocarse (a veces no tan sin querer) — vale la pena que alguien más lleve también su propio registro. |
+
+**Implicación de diseño (Fase 2):** varios de estos refranes son directamente accionables para la Game AI:
+- **"Al doble se lo cargan de primero"** y **"ahorca el doble seis"** → lógica de manejo de dobles en los niveles Medio/Experto (soltarlos pronto propios, bloquear los del rival).
+- **"Para cerrar, saca la cuenta, no la corazonada"** → fórmula concreta (168 − pintas jugadas, entre dos) que la IA Experto/Máster puede usar como umbral de decisión para intentar cerrar o no. Útil también como pregunta gamificada del modo aprendizaje.
+- **"Pensarle mucho a una sola opción es trampa disfrazada"** → refuerza la nota de tempo tell ya documentada; confirma que es un principio tradicional reconocido, no una ocurrencia del proyecto.
+- **"Nadie manda foto de su mano"** → refuerza la sección de Penalizaciones ya documentada.
 
 ## Ideas futuras (fuera de alcance actual — NO implementar aún)
 
