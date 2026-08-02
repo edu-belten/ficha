@@ -85,4 +85,55 @@ class Partida {
   void avanzarTurno() {
     _asientoEnTurno = (_asientoEnTurno % 4) + 1;
   }
+
+  /// [jugador] coloca [ficha]. Si la mesa está vacía, se coloca como
+  /// ficha de salida y [extremo] se ignora. Si la mesa ya tiene fichas,
+  /// [extremo] es obligatorio e indica contra cuál extremo se juega.
+  ///
+  /// Lanza error si no es el turno de [jugador], si no tiene esa ficha
+  /// en mano, o si la ficha no calza en el extremo indicado.
+  void jugar(Jugador jugador, Ficha ficha, {Extremo? extremo}) {
+    _validarTurno(jugador);
+
+    if (!jugador.mano.tieneFicha(ficha)) {
+      throw ArgumentError('$jugador no tiene la ficha $ficha en su mano');
+    }
+
+    if (mesa.estaVacia) {
+      mesa.colocarFichaSalida(ficha);
+    } else {
+      if (extremo == null) {
+        throw ArgumentError('Debes indicar en qué extremo se juega la ficha');
+      }
+      mesa.jugar(ficha, extremo); // lanza error si la ficha no calza
+    }
+
+    jugador.mano.quitar(ficha);
+    avanzarTurno();
+  }
+
+  /// [jugador] declara "paso".
+  ///
+  /// TODO(Fase 1 - pendiente): cuando Partida tenga referencia a los
+  /// Equipos, un pase en falso (tener jugada legal y pasar de todos modos)
+  /// deberá aplicar la penalización de +25 puntos al equipo infractor,
+  /// en vez de bloquear la acción como se hace por ahora.
+  /// (ver sección "Penalizaciones" en Las Reglas de la Ficha).
+  void pasar(Jugador jugador) {
+    _validarTurno(jugador);
+
+    if (jugador.mano.tieneJugadaLegal(mesa)) {
+      throw StateError(
+        '$jugador tiene jugada legal disponible; no puede pasar (pase en falso)',
+      );
+    }
+
+    avanzarTurno();
+  }
+
+  void _validarTurno(Jugador jugador) {
+    if (jugador.asiento != _asientoEnTurno) {
+      throw StateError('No es el turno de $jugador');
+    }
+  }
 }
