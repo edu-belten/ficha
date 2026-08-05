@@ -4,30 +4,34 @@ import 'equipo.dart';
 import 'ficha.dart';
 import 'jugador.dart';
 import 'mesa.dart';
+import 'resultado_partida.dart';
 
 /// Orquesta una partida individual: reparto de fichas, equipos, turno
-/// actual, jugadas, pases (con detección de pase en falso) y —
-/// más adelante — detección de fin de partida.
+/// actual, jugadas, pases (con detección de pase en falso), y detección
+/// de fin de partida (dominación o tranca).
 class Partida {
   final List<Jugador> jugadores; // siempre en orden de asiento: 1,2,3,4
   final Mesa mesa;
   final Equipo equipoA; // asientos 1 + 3
   final Equipo equipoB; // asientos 2 + 4
+  final Equipo equipoMano; // equipo del jugador que salió en esta partida
 
   int _asientoEnTurno;
+  ResultadoPartida? _resultado;
 
   Partida._({
     required this.jugadores,
     required this.mesa,
     required this.equipoA,
     required this.equipoB,
+    required this.equipoMano,
     required int asientoInicial,
   }) : _asientoEnTurno = asientoInicial;
 
   /// Crea una nueva partida: baraja las 28 fichas, reparte 7 a cada
-  /// jugador, arma los dos equipos (asientos 1+3 y 2+4, según la regla
-  /// del proyecto), y determina quién empieza (el que tenga la mula 6-6,
-  /// regla de la primera partida de la sesión).
+  /// jugador, arma los dos equipos (asientos 1+3 y 2+4), y determina
+  /// quién empieza (el que tenga la mula 6-6, regla de la primera
+  /// partida de la sesión).
   factory Partida.repartir(List<Jugador> jugadores, {Random? random}) {
     if (jugadores.length != 4) {
       throw ArgumentError('Una partida requiere exactamente 4 jugadores');
@@ -81,11 +85,14 @@ class Partida {
       nombre: 'Equipo 2-4',
     );
 
+    final equipoMano = equipoA.tieneJugador(jugadorInicial) ? equipoA : equipoB;
+
     return Partida._(
       jugadores: jugadoresOrdenados,
       mesa: Mesa(),
       equipoA: equipoA,
       equipoB: equipoB,
+      equipoMano: equipoMano,
       asientoInicial: jugadorInicial.asiento,
     );
   }
@@ -93,6 +100,12 @@ class Partida {
   /// El jugador cuyo turno es ahora mismo.
   Jugador get jugadorEnTurno =>
       jugadores.firstWhere((j) => j.asiento == _asientoEnTurno);
+
+  /// El resultado de la partida, o `null` si sigue en curso.
+  ResultadoPartida? get resultado => _resultado;
+
+  /// ¿La partida ya terminó (dominación o tranca)?
+  bool get haTerminado => _resultado != null;
 
   /// Regresa el equipo (A o B) al que pertenece [jugador].
   Equipo equipoDe(Jugador jugador) =>
@@ -107,9 +120,12 @@ class Partida {
   /// ficha de salida y [extremo] se ignora. Si la mesa ya tiene fichas,
   /// [extremo] es obligatorio e indica contra cuál extremo se juega.
   ///
-  /// Lanza error si no es el turno de [jugador], si no tiene esa ficha
-  /// en mano, o si la ficha no calza en el extremo indicado.
+  /// Si esta jugada deja a [jugador] sin fichas, la partida termina
+  /// inmediatamente por dominación.
   void jugar(Jugador jugador, Ficha ficha, {Extremo? extremo}) {
+    if (haTerminado) {
+      throw StateError('La partida ya terminó: $_resultado');
+    }
     _validarTurno(jugador);
 
     if (!jugador.mano.tieneFicha(ficha)) {
@@ -126,17 +142,25 @@ class Partida {
     }
 
     jugador.mano.quitar(ficha);
+
+    if (jugador.mano.estaVacia) {
+      _finalizarPorDominacion(jugador);
+      return;
+    }
+
     avanzarTurno();
+    _verificarTranca();
   }
 
   /// [jugador] declara "paso". Si en realidad sí tenía jugada legal
   /// disponible, es un "pase en falso": se aplica automáticamente
-  /// la penalización de +25 puntos al equipo de [jugador]
-  /// (ver sección "Penalizaciones" en Las Reglas de la Ficha).
+  /// la penalización de +25 puntos al equipo de [jugador].
   ///
-  /// Regresa `true` si fue un pase en falso (y por lo tanto penalizado),
-  /// `false` si fue un paso legítimo.
+  /// Regresa `true` si fue un pase en falso, `false` si fue legítimo.
   bool pasar(Jugador jugador) {
+    if (haTerminado) {
+      throw StateError('La partida ya terminó: $_resultado');
+    }
     _validarTurno(jugador);
 
     final fueFalso = jugador.mano.tieneJugadaLegal(mesa);
@@ -145,6 +169,7 @@ class Partida {
     }
 
     avanzarTurno();
+    _verificarTranca();
     return fueFalso;
   }
 
@@ -152,5 +177,62 @@ class Partida {
     if (jugador.asiento != _asientoEnTurno) {
       throw StateError('No es el turno de $jugador');
     }
+  }
+
+  /// Cierre por dominación: [jugadorQueCerro] se quedó sin fichas.
+  /// Su equipo suma únicamente las pintas del equipo RIVAL
+  /// (las del compañero del que cerró no cuentan).
+  void _finalizarPorDominacion(Jugador jugadorQueCerro) {
+    final equipoGanador = equipoDe(jugadorQueCerro);
+    final equipoPerdedor = equipoGanador == equipoA ? equipoB : equipoA;
+    final puntos = equipoPerdedor.totalPintasEnMano;
+
+    equipoGanador.agregarPuntos(puntos);
+
+    _resultado = ResultadoPartida(
+      tipoCierre: TipoCierre.dominacion,
+      equipoGanador: equipoGanador,
+      equipoPerdedor: equipoPerdedor,
+      puntosGanados: puntos,
+    );
+  }
+
+  /// Revisa si los 4 jugadores están bloqueados contra el estado actual
+  /// de la mesa. Si es así, la partida termina por tranca.
+  void _verificarTranca() {
+    if (haTerminado || mesa.estaVacia) return;
+
+    final todosBloqueados = jugadores.every(
+      (j) => !j.mano.tieneJugadaLegal(mesa),
+    );
+    if (!todosBloqueados) return;
+
+    final pintasA = equipoA.totalPintasEnMano;
+    final pintasB = equipoB.totalPintasEnMano;
+
+    Equipo equipoGanador;
+    var desempate = false;
+
+    if (pintasA < pintasB) {
+      equipoGanador = equipoA;
+    } else if (pintasB < pintasA) {
+      equipoGanador = equipoB;
+    } else {
+      equipoGanador = equipoMano; // empate: gana quien tenía la mano
+      desempate = true;
+    }
+
+    final equipoPerdedor = equipoGanador == equipoA ? equipoB : equipoA;
+    final puntos = equipoPerdedor.totalPintasEnMano;
+
+    equipoGanador.agregarPuntos(puntos);
+
+    _resultado = ResultadoPartida(
+      tipoCierre: TipoCierre.tranca,
+      equipoGanador: equipoGanador,
+      equipoPerdedor: equipoPerdedor,
+      puntosGanados: puntos,
+      desempatePorMano: desempate,
+    );
   }
 }

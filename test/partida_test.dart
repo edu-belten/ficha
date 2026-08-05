@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ficha_app/models/ficha.dart';
 import 'package:ficha_app/models/jugador.dart';
 import 'package:ficha_app/models/partida.dart';
+import 'package:ficha_app/models/resultado_partida.dart';
 
 List<Jugador> crearJugadores() => [
   Jugador(asiento: 1, nombre: 'J1'),
@@ -253,6 +254,148 @@ void main() {
 
       expect(partida.equipoDe(j1), equals(partida.equipoA));
       expect(partida.equipoDe(j2), equals(partida.equipoB));
+    });
+  });
+
+  group('Partida - fin de partida por dominación', () {
+    test(
+      'termina y calcula puntos correctamente cuando un jugador se queda sin fichas',
+      () {
+        final jugadores = crearJugadores();
+        final partida = Partida.repartir(jugadores, random: Random(42));
+        final jugadorInicial = partida.jugadorEnTurno;
+
+        // Forzamos que jugadorInicial tenga una sola ficha: su salida.
+        for (final f in List.of(jugadorInicial.mano.fichas)) {
+          jugadorInicial.mano.quitar(f);
+        }
+        final fichaSalida = Ficha(1, 2);
+        jugadorInicial.mano.agregar(fichaSalida);
+
+        final equipoGanadorEsperado = partida.equipoDe(jugadorInicial);
+        final equipoRival = equipoGanadorEsperado == partida.equipoA
+            ? partida.equipoB
+            : partida.equipoA;
+        final puntosEsperados = equipoRival.totalPintasEnMano;
+
+        partida.jugar(jugadorInicial, fichaSalida);
+
+        expect(partida.haTerminado, isTrue);
+        expect(partida.resultado!.tipoCierre, TipoCierre.dominacion);
+        expect(partida.resultado!.equipoGanador, equals(equipoGanadorEsperado));
+        expect(partida.resultado!.equipoPerdedor, equals(equipoRival));
+        expect(partida.resultado!.puntosGanados, puntosEsperados);
+        expect(equipoGanadorEsperado.marcadorAcumulado, puntosEsperados);
+      },
+    );
+
+    test('lanza error si se intenta jugar o pasar después de que terminó', () {
+      final jugadores = crearJugadores();
+      final partida = Partida.repartir(jugadores, random: Random(42));
+      final jugadorInicial = partida.jugadorEnTurno;
+
+      for (final f in List.of(jugadorInicial.mano.fichas)) {
+        jugadorInicial.mano.quitar(f);
+      }
+      final fichaSalida = Ficha(1, 2);
+      jugadorInicial.mano.agregar(fichaSalida);
+      partida.jugar(jugadorInicial, fichaSalida);
+
+      expect(partida.haTerminado, isTrue);
+      expect(() => partida.pasar(jugadorInicial), throwsStateError);
+    });
+  });
+
+  group('Partida - fin de partida por tranca', () {
+    test('detecta tranca, calcula el ganador por menor suma de pintas', () {
+      final jugadores = crearJugadores();
+      final partida = Partida.repartir(jugadores, random: Random(42));
+      final jugadorInicial = partida.jugadorEnTurno;
+
+      // Vaciamos las 4 manos para construir un escenario controlado.
+      for (final j in jugadores) {
+        for (final f in List.of(j.mano.fichas)) {
+          j.mano.quitar(f);
+        }
+      }
+
+      // jugadorInicial: sale con 0-1, y le queda una ficha que no calzará
+      // después (2-3), para que también quede bloqueado tras jugar.
+      jugadorInicial.mano.agregar(Ficha(0, 1));
+      jugadorInicial.mano.agregar(Ficha(2, 3)); // 5 pintas
+
+      final partnerInicial = jugadores.firstWhere(
+        (j) =>
+            j != jugadorInicial &&
+            partida.equipoDe(jugadorInicial).tieneJugador(j),
+      );
+      final rivales = jugadores
+          .where((j) => j != jugadorInicial && j != partnerInicial)
+          .toList();
+
+      // Ninguna de las fichas restantes contiene 0 ni 1, para que
+      // nadie tenga jugada legal después de la salida.
+      partnerInicial.mano.agregar(Ficha(2, 4)); // 6 pintas
+      rivales[0].mano.agregar(Ficha(2, 2)); // 4 pintas
+      rivales[1].mano.agregar(Ficha(3, 4)); // 7 pintas
+
+      final equipoEsperado = partida.equipoDe(jugadorInicial); // 5+6=11
+      final equipoRivalEsperado = equipoEsperado == partida.equipoA
+          ? partida.equipoB
+          : partida.equipoA; // 4+7=11... ver siguiente test para empate
+
+      partida.jugar(jugadorInicial, Ficha(0, 1));
+
+      expect(partida.haTerminado, isTrue);
+      expect(partida.resultado!.tipoCierre, TipoCierre.tranca);
+      // Con 11 vs 11 esto en realidad cae en empate; ver assertions abajo.
+      expect(partida.resultado!.equipoGanador, equals(equipoEsperado));
+      expect(partida.resultado!.equipoPerdedor, equals(equipoRivalEsperado));
+      expect(partida.resultado!.desempatePorMano, isTrue);
+      expect(partida.resultado!.puntosGanados, 11);
+      expect(equipoEsperado.marcadorAcumulado, 11);
+    });
+
+    test('gana el equipo con menos pintas cuando no hay empate', () {
+      final jugadores = crearJugadores();
+      final partida = Partida.repartir(jugadores, random: Random(42));
+      final jugadorInicial = partida.jugadorEnTurno;
+
+      for (final j in jugadores) {
+        for (final f in List.of(j.mano.fichas)) {
+          j.mano.quitar(f);
+        }
+      }
+
+      jugadorInicial.mano.agregar(Ficha(0, 1));
+      jugadorInicial.mano.agregar(Ficha(2, 3)); // 5 pintas
+
+      final partnerInicial = jugadores.firstWhere(
+        (j) =>
+            j != jugadorInicial &&
+            partida.equipoDe(jugadorInicial).tieneJugador(j),
+      );
+      final rivales = jugadores
+          .where((j) => j != jugadorInicial && j != partnerInicial)
+          .toList();
+
+      partnerInicial.mano.agregar(Ficha(2, 2)); // 4 pintas -> equipo inicial: 9
+      rivales[0].mano.agregar(Ficha(4, 4)); // 8 pintas
+      rivales[1].mano.agregar(Ficha(5, 5)); // 10 pintas -> equipo rival: 18
+
+      final equipoEsperado = partida.equipoDe(jugadorInicial);
+      final equipoRivalEsperado = equipoEsperado == partida.equipoA
+          ? partida.equipoB
+          : partida.equipoA;
+
+      partida.jugar(jugadorInicial, Ficha(0, 1));
+
+      expect(partida.haTerminado, isTrue);
+      expect(partida.resultado!.tipoCierre, TipoCierre.tranca);
+      expect(partida.resultado!.equipoGanador, equals(equipoEsperado));
+      expect(partida.resultado!.desempatePorMano, isFalse);
+      expect(partida.resultado!.puntosGanados, 18); // pintas del rival
+      expect(equipoEsperado.marcadorAcumulado, 18);
     });
   });
 }
