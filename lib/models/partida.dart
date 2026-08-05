@@ -28,11 +28,26 @@ class Partida {
     required int asientoInicial,
   }) : _asientoEnTurno = asientoInicial;
 
-  /// Crea una nueva partida: baraja las 28 fichas, reparte 7 a cada
-  /// jugador, arma los dos equipos (asientos 1+3 y 2+4), y determina
-  /// quién empieza (el que tenga la mula 6-6, regla de la primera
-  /// partida de la sesión).
-  factory Partida.repartir(List<Jugador> jugadores, {Random? random}) {
+  /// Crea una nueva partida: baraja las 28 fichas y reparte 7 a cada
+  /// jugador.
+  ///
+  /// [equipoA] y [equipoB] son opcionales: si no se pasan, se crean
+  /// nuevos (1+3 y 2+4) con marcador en 0 — útil para probar una
+  /// partida aislada. Si se pasan (por ejemplo, desde [Sesion] para
+  /// mantener el marcador acumulado entre partidas), se reutilizan tal
+  /// cual, incluyendo su `marcadorAcumulado` actual.
+  ///
+  /// [jugadorQueSale] es opcional: si no se pasa, se determina buscando
+  /// la mula 6-6 (regla de la primera partida de la sesión). Si se pasa
+  /// (partidas siguientes: el equipo ganador decide quién sale), se usa
+  /// directamente sin buscar la mula.
+  factory Partida.repartir(
+    List<Jugador> jugadores, {
+    Random? random,
+    Equipo? equipoA,
+    Equipo? equipoB,
+    Jugador? jugadorQueSale,
+  }) {
     if (jugadores.length != 4) {
       throw ArgumentError('Una partida requiere exactamente 4 jugadores');
     }
@@ -65,33 +80,47 @@ class Partida {
       }
     }
 
-    final mula = Ficha(6, 6);
-    final jugadorInicial = jugadoresOrdenados.firstWhere(
-      (j) => j.mano.tieneFicha(mula),
-      orElse: () => throw StateError(
-        'Ninguna mano tiene la mula 6-6; algo salió mal en el reparto',
-      ),
-    );
-
     // Asientos 1+3 son equipo, 2+4 son el otro (compañeros sentados enfrente).
-    final equipoA = Equipo(
-      jugadorA: jugadoresOrdenados[0], // asiento 1
-      jugadorB: jugadoresOrdenados[2], // asiento 3
-      nombre: 'Equipo 1-3',
-    );
-    final equipoB = Equipo(
-      jugadorA: jugadoresOrdenados[1], // asiento 2
-      jugadorB: jugadoresOrdenados[3], // asiento 4
-      nombre: 'Equipo 2-4',
-    );
+    final equipoAFinal =
+        equipoA ??
+        Equipo(
+          jugadorA: jugadoresOrdenados[0], // asiento 1
+          jugadorB: jugadoresOrdenados[2], // asiento 3
+          nombre: 'Equipo 1-3',
+        );
+    final equipoBFinal =
+        equipoB ??
+        Equipo(
+          jugadorA: jugadoresOrdenados[1], // asiento 2
+          jugadorB: jugadoresOrdenados[3], // asiento 4
+          nombre: 'Equipo 2-4',
+        );
 
-    final equipoMano = equipoA.tieneJugador(jugadorInicial) ? equipoA : equipoB;
+    Jugador jugadorInicial;
+    if (jugadorQueSale != null) {
+      if (!jugadoresOrdenados.contains(jugadorQueSale)) {
+        throw ArgumentError('jugadorQueSale no pertenece a esta partida');
+      }
+      jugadorInicial = jugadorQueSale;
+    } else {
+      final mula = Ficha(6, 6);
+      jugadorInicial = jugadoresOrdenados.firstWhere(
+        (j) => j.mano.tieneFicha(mula),
+        orElse: () => throw StateError(
+          'Ninguna mano tiene la mula 6-6; algo salió mal en el reparto',
+        ),
+      );
+    }
+
+    final equipoMano = equipoAFinal.tieneJugador(jugadorInicial)
+        ? equipoAFinal
+        : equipoBFinal;
 
     return Partida._(
       jugadores: jugadoresOrdenados,
       mesa: Mesa(),
-      equipoA: equipoA,
-      equipoB: equipoB,
+      equipoA: equipoAFinal,
+      equipoB: equipoBFinal,
       equipoMano: equipoMano,
       asientoInicial: jugadorInicial.asiento,
     );

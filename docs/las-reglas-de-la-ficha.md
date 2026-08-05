@@ -1,6 +1,6 @@
 # Las Reglas de la Ficha
 
-*Versión: 4.0 — última edición: 2 de agosto, 2026*
+*Versión: 4.1 — última edición: 2 de agosto, 2026*
 
 *Documento técnico de reglas — contrato del motor de juego (Fase 1). Cualquier ambigüedad de implementación debe resolverse consultando este documento, no asumiendo.*
 
@@ -91,6 +91,7 @@ Ningún jugador puede colocar ficha en ninguno de los dos extremos.
 - Se suman los puntos (pintas) de las fichas en mano de **cada equipo completo** (los dos compañeros).
 - Gana el equipo con **menor suma**.
 - **Empate:** gana el equipo que tenía la mano (el que salió) en esa partida.
+- **Puntos que suma el ganador al acumulado:** las pintas totales del equipo **perdedor** (mismo mecanismo que en dominación, pero aquí contando ambas manos del equipo que perdió, ya que en tranca sí se cuentan las dos manos completas de cada bando).
 
 ## Empate de marcador — "Se raya"
 
