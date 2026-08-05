@@ -28,19 +28,11 @@ class Partida {
     required int asientoInicial,
   }) : _asientoEnTurno = asientoInicial;
 
-  /// Crea una nueva partida: baraja las 28 fichas y reparte 7 a cada
-  /// jugador.
-  ///
-  /// [equipoA] y [equipoB] son opcionales: si no se pasan, se crean
-  /// nuevos (1+3 y 2+4) con marcador en 0 — útil para probar una
-  /// partida aislada. Si se pasan (por ejemplo, desde [Sesion] para
-  /// mantener el marcador acumulado entre partidas), se reutilizan tal
-  /// cual, incluyendo su `marcadorAcumulado` actual.
-  ///
-  /// [jugadorQueSale] es opcional: si no se pasa, se determina buscando
-  /// la mula 6-6 (regla de la primera partida de la sesión). Si se pasa
-  /// (partidas siguientes: el equipo ganador decide quién sale), se usa
-  /// directamente sin buscar la mula.
+  /// Crea una nueva partida: vacía las manos (por si estos jugadores
+  /// vienen de una partida anterior en la misma sesión), baraja las 28
+  /// fichas, reparte 7 a cada jugador, arma los dos equipos (asientos
+  /// 1+3 y 2+4), y determina quién empieza (el que tenga la mula 6-6,
+  /// regla de la primera partida de la sesión).
   factory Partida.repartir(
     List<Jugador> jugadores, {
     Random? random,
@@ -61,6 +53,14 @@ class Partida {
 
     final jugadoresOrdenados = List<Jugador>.from(jugadores)
       ..sort((a, b) => a.asiento.compareTo(b.asiento));
+
+    // Vaciamos las manos por si estos jugadores vienen de una partida
+    // anterior en la misma sesión (si no, las fichas viejas se acumulan
+    // con las nuevas — bug real que encontró el simulador de miles de
+    // partidas: el total de pintas en juego crecía sin control).
+    for (final j in jugadoresOrdenados) {
+      j.mano.vaciar();
+    }
 
     final set = <Ficha>[];
     for (var i = 0; i <= 6; i++) {

@@ -52,4 +52,11 @@ class Mano {
   /// ¿Existe al menos una jugada legal contra el estado actual de [mesa]?
   /// Se usa para validar si declarar "paso" es legítimo.
   bool tieneJugadaLegal(Mesa mesa) => fichasJugables(mesa).isNotEmpty;
+
+  /// Vacía la mano por completo. Se usa al repartir una nueva partida,
+  /// para no arrastrar fichas sobrantes de la partida anterior cuando
+  /// se reutiliza el mismo Jugador en varias partidas de una sesión.
+  void vaciar() {
+    _fichas.clear();
+  }
 }
