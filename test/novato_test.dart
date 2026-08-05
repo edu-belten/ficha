@@ -2,9 +2,23 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ficha_app/models/ficha.dart';
+import 'package:ficha_app/models/jugador.dart';
 import 'package:ficha_app/models/mano.dart';
 import 'package:ficha_app/models/mesa.dart';
+import 'package:ficha_app/ia/contexto_jugada.dart';
 import 'package:ficha_app/ia/novato.dart';
+
+ContextoJugada _contexto(Mano mano, Mesa mesa) {
+  final jugador = Jugador(asiento: 1, nombre: 'Yo', manoInicial: mano);
+  final companero = Jugador(asiento: 3, nombre: 'Compa');
+  return ContextoJugada(
+    jugador: jugador,
+    companero: companero,
+    mano: mano,
+    mesa: mesa,
+    historialPases: [],
+  );
+}
 
 void main() {
   group('Novato', () {
@@ -14,7 +28,7 @@ void main() {
       final mano = Mano([Ficha(3, 4)]); // no calza con 0 ni 1
 
       final novato = Novato(random: Random(1));
-      expect(() => novato.decidir(mano, mesa), throwsStateError);
+      expect(() => novato.decidir(_contexto(mano, mesa)), throwsStateError);
     });
 
     test(
@@ -24,7 +38,7 @@ void main() {
         final mano = Mano([Ficha(2, 3), Ficha(5, 5)]);
 
         final novato = Novato(random: Random(1));
-        final decision = novato.decidir(mano, mesa);
+        final decision = novato.decidir(_contexto(mano, mesa));
 
         expect(mano.tieneFicha(decision.ficha), isTrue);
         expect(decision.extremo, isNull);
@@ -37,7 +51,7 @@ void main() {
       final mano = Mano([Ficha(5, 6), Ficha(1, 2), Ficha(3, 3)]);
 
       final novato = Novato(random: Random(42));
-      final decision = novato.decidir(mano, mesa);
+      final decision = novato.decidir(_contexto(mano, mesa));
 
       expect(
         decision.ficha.calza(mesa.extremoIzquierdo!) ||
@@ -53,7 +67,7 @@ void main() {
       final mano = Mano([Ficha(5, 6)]); // solo calza con el 5
 
       final novato = Novato(random: Random(7));
-      final decision = novato.decidir(mano, mesa);
+      final decision = novato.decidir(_contexto(mano, mesa));
 
       final valorExtremo = decision.extremo == Extremo.izquierdo
           ? mesa.extremoIzquierdo!
@@ -71,7 +85,7 @@ void main() {
         var vecesAlta = 0;
         var vecesBaja = 0;
         for (var i = 0; i < 500; i++) {
-          final decision = novato.decidir(mano, mesa);
+          final decision = novato.decidir(_contexto(mano, mesa));
           if (decision.ficha == Ficha(6, 6)) {
             vecesAlta++;
           } else {
@@ -79,7 +93,6 @@ void main() {
           }
         }
 
-        // Con pesos (0+1)=1 vs (12+1)=13, la alta debería salir MUCHO más.
         expect(vecesAlta, greaterThan(vecesBaja));
       },
     );

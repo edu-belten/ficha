@@ -398,4 +398,56 @@ void main() {
       expect(equipoEsperado.marcadorAcumulado, 18);
     });
   });
+  group('Partida - historialPases', () {
+    test('un pase legítimo se registra con los extremos correctos', () {
+      final jugadores = crearJugadores();
+      final partida = Partida.repartir(jugadores, random: Random(42));
+      final j1 = partida.jugadorEnTurno;
+      partida.jugar(j1, j1.mano.fichas.first);
+
+      final j2 = partida.jugadorEnTurno;
+      for (final f in List.of(j2.mano.fichas)) {
+        j2.mano.quitar(f);
+      }
+      final extremos = {
+        partida.mesa.extremoIzquierdo,
+        partida.mesa.extremoDerecho,
+      };
+      final valorImposible = [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+      ].firstWhere((v) => !extremos.contains(v));
+      j2.mano.agregar(Ficha(valorImposible, valorImposible));
+
+      final izqAntes = partida.mesa.extremoIzquierdo;
+      final derAntes = partida.mesa.extremoDerecho;
+
+      partida.pasar(j2);
+
+      expect(partida.historialPases.length, 1);
+      expect(partida.historialPases.first.jugador, equals(j2));
+      expect(partida.historialPases.first.extremoIzquierdo, izqAntes);
+      expect(partida.historialPases.first.extremoDerecho, derAntes);
+    });
+
+    test('un pase en falso NO se registra en historialPases', () {
+      final jugadores = crearJugadores();
+      final partida = Partida.repartir(jugadores, random: Random(42));
+      final j1 = partida.jugadorEnTurno;
+      partida.jugar(j1, j1.mano.fichas.first);
+
+      final j2 = partida.jugadorEnTurno;
+      final extremo = partida.mesa.extremoIzquierdo!;
+      j2.mano.agregar(Ficha(extremo, 6));
+
+      partida.pasar(j2);
+
+      expect(partida.historialPases, isEmpty);
+    });
+  });
 }

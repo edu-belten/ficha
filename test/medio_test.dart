@@ -2,9 +2,23 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ficha_app/models/ficha.dart';
+import 'package:ficha_app/models/jugador.dart';
 import 'package:ficha_app/models/mano.dart';
 import 'package:ficha_app/models/mesa.dart';
+import 'package:ficha_app/ia/contexto_jugada.dart';
 import 'package:ficha_app/ia/medio.dart';
+
+ContextoJugada _contexto(Mano mano, Mesa mesa) {
+  final jugador = Jugador(asiento: 1, nombre: 'Yo', manoInicial: mano);
+  final companero = Jugador(asiento: 3, nombre: 'Compa');
+  return ContextoJugada(
+    jugador: jugador,
+    companero: companero,
+    mano: mano,
+    mesa: mesa,
+    historialPases: [],
+  );
+}
 
 void main() {
   group('Medio', () {
@@ -13,7 +27,7 @@ void main() {
       mesa.colocarFichaSalida(Ficha(0, 1));
       final mano = Mano([Ficha(3, 4)]);
       final medio = Medio(random: Random(1));
-      expect(() => medio.decidir(mano, mesa), throwsStateError);
+      expect(() => medio.decidir(_contexto(mano, mesa)), throwsStateError);
     });
 
     test('prioriza jugar una mula alta si está disponible', () {
@@ -21,7 +35,7 @@ void main() {
       final mano = Mano([Ficha(6, 6), Ficha(2, 3)]);
       final medio = Medio(random: Random(1));
 
-      final decision = medio.decidir(mano, mesa);
+      final decision = medio.decidir(_contexto(mano, mesa));
       expect(decision.ficha, equals(Ficha(6, 6)));
     });
 
@@ -31,7 +45,7 @@ void main() {
       final mano = Mano([Ficha(5, 6), Ficha(2, 2)]); // valor 11 vs valor 4
       final medio = Medio(random: Random(1));
 
-      final decision = medio.decidir(mano, mesa);
+      final decision = medio.decidir(_contexto(mano, mesa));
       expect(decision.ficha, equals(Ficha(5, 6)));
     });
 
@@ -41,7 +55,7 @@ void main() {
       final mano = Mano([Ficha(3, 3)]); // solo calza en el extremo 3
       final medio = Medio(random: Random(3));
 
-      final decision = medio.decidir(mano, mesa);
+      final decision = medio.decidir(_contexto(mano, mesa));
       final valorExtremo = decision.extremo == Extremo.izquierdo
           ? mesa.extremoIzquierdo!
           : mesa.extremoDerecho!;
@@ -53,7 +67,7 @@ void main() {
       final mano = Mano([Ficha(4, 4), Ficha(6, 6)]);
       final medio = Medio(random: Random(1));
 
-      final decision = medio.decidir(mano, mesa);
+      final decision = medio.decidir(_contexto(mano, mesa));
       expect(decision.ficha, equals(Ficha(6, 6)));
     });
   });

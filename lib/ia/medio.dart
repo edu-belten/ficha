@@ -1,8 +1,8 @@
 import 'dart:math';
 
 import '../models/ficha.dart';
-import '../models/mano.dart';
 import '../models/mesa.dart';
+import 'contexto_jugada.dart';
 import 'decision_ia.dart';
 import 'estrategia_ia.dart';
 
@@ -13,16 +13,16 @@ import 'estrategia_ia.dart';
 ///   puede, en vez de cargarlas.
 /// - Sin mula alta disponible, prioriza la ficha jugable de mayor
 ///   valor (deshacerse de pintas pesadas).
-/// - Reconoce fichas/números agotados (vía ContadorFichas), aunque en
-///   este nivel todavía no lo usa para jugar activamente en contra del
-///   rival — eso empieza en Experto.
 class Medio implements EstrategiaIA {
   final Random _random;
 
   Medio({Random? random}) : _random = random ?? Random();
 
   @override
-  DecisionIA decidir(Mano mano, Mesa mesa) {
+  DecisionIA decidir(ContextoJugada contexto) {
+    final mano = contexto.mano;
+    final mesa = contexto.mesa;
+
     final jugables = mano.fichasJugables(mesa);
     if (jugables.isEmpty) {
       throw StateError(
@@ -40,14 +40,12 @@ class Medio implements EstrategiaIA {
   }
 
   Ficha _elegirFicha(List<Ficha> jugables) {
-    // Prioridad 1: mulas de valor alto (4-4, 5-5, 6-6 → valor 8, 10, 12).
     final mulasAltas = jugables.where((f) => f.esMula && f.valor >= 8).toList();
     if (mulasAltas.isNotEmpty) {
       mulasAltas.sort((a, b) => b.valor.compareTo(a.valor));
       return mulasAltas.first;
     }
 
-    // Prioridad 2: la ficha jugable de mayor valor. Empate se rompe al azar.
     final maxValor = jugables.map((f) => f.valor).reduce(max);
     final candidatas = jugables.where((f) => f.valor == maxValor).toList();
     return candidatas[_random.nextInt(candidatas.length)];

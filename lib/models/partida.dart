@@ -4,17 +4,24 @@ import 'equipo.dart';
 import 'ficha.dart';
 import 'jugador.dart';
 import 'mesa.dart';
+import 'registro_pase.dart';
 import 'resultado_partida.dart';
 
 /// Orquesta una partida individual: reparto de fichas, equipos, turno
-/// actual, jugadas, pases (con detección de pase en falso), y detección
-/// de fin de partida (dominación o tranca).
+/// actual, jugadas, pases (con detección de pase en falso y registro
+/// público de pases legítimos para inferencia), y detección de fin de
+/// partida (dominación o tranca).
 class Partida {
   final List<Jugador> jugadores; // siempre en orden de asiento: 1,2,3,4
   final Mesa mesa;
   final Equipo equipoA; // asientos 1 + 3
   final Equipo equipoB; // asientos 2 + 4
   final Equipo equipoMano; // equipo del jugador que salió en esta partida
+
+  /// Historial público de pases legítimos: quién pasó y qué extremos
+  /// estaban expuestos en ese momento. Los pases en falso NO se
+  /// agregan aquí. Es la base de la inferencia del nivel Experto.
+  final List<RegistroPase> historialPases = [];
 
   int _asientoEnTurno;
   ResultadoPartida? _resultado;
@@ -55,9 +62,7 @@ class Partida {
       ..sort((a, b) => a.asiento.compareTo(b.asiento));
 
     // Vaciamos las manos por si estos jugadores vienen de una partida
-    // anterior en la misma sesión (si no, las fichas viejas se acumulan
-    // con las nuevas — bug real que encontró el simulador de miles de
-    // partidas: el total de pintas en juego crecía sin control).
+    // anterior en la misma sesión.
     for (final j in jugadoresOrdenados) {
       j.mano.vaciar();
     }
@@ -182,8 +187,11 @@ class Partida {
   }
 
   /// [jugador] declara "paso". Si en realidad sí tenía jugada legal
-  /// disponible, es un "pase en falso": se aplica automáticamente
-  /// la penalización de +25 puntos al equipo de [jugador].
+  /// disponible, es un "pase en falso": se aplica automáticamente la
+  /// penalización de +25 puntos al equipo de [jugador], y NO se
+  /// registra en [historialPases] (no dice nada real sobre su mano).
+  /// Si fue un pase legítimo, sí se registra — es la base de la
+  /// inferencia del nivel Experto.
   ///
   /// Regresa `true` si fue un pase en falso, `false` si fue legítimo.
   bool pasar(Jugador jugador) {
@@ -195,6 +203,14 @@ class Partida {
     final fueFalso = jugador.mano.tieneJugadaLegal(mesa);
     if (fueFalso) {
       equipoDe(jugador).agregarPuntos(25);
+    } else {
+      historialPases.add(
+        RegistroPase(
+          jugador: jugador,
+          extremoIzquierdo: mesa.extremoIzquierdo,
+          extremoDerecho: mesa.extremoDerecho,
+        ),
+      );
     }
 
     avanzarTurno();

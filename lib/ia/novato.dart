@@ -1,8 +1,8 @@
 import 'dart:math';
 
 import '../models/ficha.dart';
-import '../models/mano.dart';
 import '../models/mesa.dart';
+import 'contexto_jugada.dart';
 import 'decision_ia.dart';
 import 'estrategia_ia.dart';
 
@@ -15,7 +15,10 @@ class Novato implements EstrategiaIA {
   Novato({Random? random}) : _random = random ?? Random();
 
   @override
-  DecisionIA decidir(Mano mano, Mesa mesa) {
+  DecisionIA decidir(ContextoJugada contexto) {
+    final mano = contexto.mano;
+    final mesa = contexto.mesa;
+
     final jugables = mano.fichasJugables(mesa);
     if (jugables.isEmpty) {
       throw StateError(
