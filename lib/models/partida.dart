@@ -1,29 +1,33 @@
 import 'dart:math';
 
+import 'equipo.dart';
 import 'ficha.dart';
 import 'jugador.dart';
 import 'mesa.dart';
 
-/// Orquesta una partida individual: reparto de fichas, turno actual,
-/// y (más adelante) jugadas, pases y detección de fin de partida.
+/// Orquesta una partida individual: reparto de fichas, equipos, turno
+/// actual, jugadas, pases (con detección de pase en falso) y —
+/// más adelante — detección de fin de partida.
 class Partida {
   final List<Jugador> jugadores; // siempre en orden de asiento: 1,2,3,4
   final Mesa mesa;
+  final Equipo equipoA; // asientos 1 + 3
+  final Equipo equipoB; // asientos 2 + 4
 
   int _asientoEnTurno;
 
   Partida._({
     required this.jugadores,
     required this.mesa,
+    required this.equipoA,
+    required this.equipoB,
     required int asientoInicial,
   }) : _asientoEnTurno = asientoInicial;
 
-  /// Crea una nueva partida: baraja las 28 fichas y reparte 7 a cada
-  /// jugador. El jugador que tenga la mula 6-6 empieza
-  /// (regla de la primera partida de la sesión).
-  ///
-  /// [jugadores] debe tener exactamente 4 elementos, con asientos 1-4
-  /// (no necesariamente en ese orden en la lista, se ordenan internamente).
+  /// Crea una nueva partida: baraja las 28 fichas, reparte 7 a cada
+  /// jugador, arma los dos equipos (asientos 1+3 y 2+4, según la regla
+  /// del proyecto), y determina quién empieza (el que tenga la mula 6-6,
+  /// regla de la primera partida de la sesión).
   factory Partida.repartir(List<Jugador> jugadores, {Random? random}) {
     if (jugadores.length != 4) {
       throw ArgumentError('Una partida requiere exactamente 4 jugadores');
@@ -36,12 +40,9 @@ class Partida {
       );
     }
 
-    // Ordenamos por asiento para que el resto de la clase pueda
-    // confiar en que jugadores[0] es asiento 1, jugadores[1] es asiento 2, etc.
     final jugadoresOrdenados = List<Jugador>.from(jugadores)
       ..sort((a, b) => a.asiento.compareTo(b.asiento));
 
-    // Construir las 28 fichas del set completo (0-0 hasta 6-6).
     final set = <Ficha>[];
     for (var i = 0; i <= 6; i++) {
       for (var j = i; j <= 6; j++) {
@@ -52,7 +53,6 @@ class Partida {
 
     set.shuffle(random ?? Random());
 
-    // Repartir 7 fichas a cada jugador, en orden de asiento.
     for (var i = 0; i < jugadoresOrdenados.length; i++) {
       final inicio = i * 7;
       final manoFichas = set.sublist(inicio, inicio + 7);
@@ -61,7 +61,6 @@ class Partida {
       }
     }
 
-    // Encontrar quién tiene la mula 6-6 para que empiece.
     final mula = Ficha(6, 6);
     final jugadorInicial = jugadoresOrdenados.firstWhere(
       (j) => j.mano.tieneFicha(mula),
@@ -70,9 +69,23 @@ class Partida {
       ),
     );
 
+    // Asientos 1+3 son equipo, 2+4 son el otro (compañeros sentados enfrente).
+    final equipoA = Equipo(
+      jugadorA: jugadoresOrdenados[0], // asiento 1
+      jugadorB: jugadoresOrdenados[2], // asiento 3
+      nombre: 'Equipo 1-3',
+    );
+    final equipoB = Equipo(
+      jugadorA: jugadoresOrdenados[1], // asiento 2
+      jugadorB: jugadoresOrdenados[3], // asiento 4
+      nombre: 'Equipo 2-4',
+    );
+
     return Partida._(
       jugadores: jugadoresOrdenados,
       mesa: Mesa(),
+      equipoA: equipoA,
+      equipoB: equipoB,
       asientoInicial: jugadorInicial.asiento,
     );
   }
@@ -80,6 +93,10 @@ class Partida {
   /// El jugador cuyo turno es ahora mismo.
   Jugador get jugadorEnTurno =>
       jugadores.firstWhere((j) => j.asiento == _asientoEnTurno);
+
+  /// Regresa el equipo (A o B) al que pertenece [jugador].
+  Equipo equipoDe(Jugador jugador) =>
+      equipoA.tieneJugador(jugador) ? equipoA : equipoB;
 
   /// Avanza el turno al siguiente jugador (hacia la derecha, en contra del reloj).
   void avanzarTurno() {
@@ -112,23 +129,23 @@ class Partida {
     avanzarTurno();
   }
 
-  /// [jugador] declara "paso".
-  ///
-  /// TODO(Fase 1 - pendiente): cuando Partida tenga referencia a los
-  /// Equipos, un pase en falso (tener jugada legal y pasar de todos modos)
-  /// deberá aplicar la penalización de +25 puntos al equipo infractor,
-  /// en vez de bloquear la acción como se hace por ahora.
+  /// [jugador] declara "paso". Si en realidad sí tenía jugada legal
+  /// disponible, es un "pase en falso": se aplica automáticamente
+  /// la penalización de +25 puntos al equipo de [jugador]
   /// (ver sección "Penalizaciones" en Las Reglas de la Ficha).
-  void pasar(Jugador jugador) {
+  ///
+  /// Regresa `true` si fue un pase en falso (y por lo tanto penalizado),
+  /// `false` si fue un paso legítimo.
+  bool pasar(Jugador jugador) {
     _validarTurno(jugador);
 
-    if (jugador.mano.tieneJugadaLegal(mesa)) {
-      throw StateError(
-        '$jugador tiene jugada legal disponible; no puede pasar (pase en falso)',
-      );
+    final fueFalso = jugador.mano.tieneJugadaLegal(mesa);
+    if (fueFalso) {
+      equipoDe(jugador).agregarPuntos(25);
     }
 
     avanzarTurno();
+    return fueFalso;
   }
 
   void _validarTurno(Jugador jugador) {

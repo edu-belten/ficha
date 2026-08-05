@@ -53,6 +53,24 @@ void main() {
       final partida = Partida.repartir(crearJugadores(), random: Random(1));
       expect(partida.mesa.estaVacia, isTrue);
     });
+
+    test('arma los equipos correctamente (1+3 y 2+4)', () {
+      final jugadores = crearJugadores();
+      final partida = Partida.repartir(jugadores, random: Random(42));
+
+      final j1 = jugadores.firstWhere((j) => j.asiento == 1);
+      final j2 = jugadores.firstWhere((j) => j.asiento == 2);
+      final j3 = jugadores.firstWhere((j) => j.asiento == 3);
+      final j4 = jugadores.firstWhere((j) => j.asiento == 4);
+
+      expect(partida.equipoA.tieneJugador(j1), isTrue);
+      expect(partida.equipoA.tieneJugador(j3), isTrue);
+      expect(partida.equipoA.tieneJugador(j2), isFalse);
+
+      expect(partida.equipoB.tieneJugador(j2), isTrue);
+      expect(partida.equipoB.tieneJugador(j4), isTrue);
+      expect(partida.equipoB.tieneJugador(j1), isFalse);
+    });
   });
 
   group('Partida - avanzar turno', () {
@@ -162,49 +180,79 @@ void main() {
       expect(() => partida.pasar(otroAsiento), throwsStateError);
     });
 
-    test('pasar() avanza el turno cuando el jugador no tiene jugada legal', () {
+    test(
+      'pasar() avanza el turno y regresa false cuando no hay jugada legal',
+      () {
+        final jugadores = crearJugadores();
+        final partida = Partida.repartir(jugadores, random: Random(42));
+        final j1 = partida.jugadorEnTurno;
+        partida.jugar(j1, j1.mano.fichas.first);
+
+        final j2 = partida.jugadorEnTurno;
+
+        final fichasOriginales = List.of(j2.mano.fichas);
+        for (final f in fichasOriginales) {
+          j2.mano.quitar(f);
+        }
+        final extremos = {
+          partida.mesa.extremoIzquierdo,
+          partida.mesa.extremoDerecho,
+        };
+        final valorImposible = [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+        ].firstWhere((v) => !extremos.contains(v));
+        j2.mano.agregar(Ficha(valorImposible, valorImposible));
+
+        final asientoAntes = j2.asiento;
+        final fueFalso = partida.pasar(j2);
+
+        expect(fueFalso, isFalse);
+        expect(partida.jugadorEnTurno.asiento, (asientoAntes % 4) + 1);
+        expect(partida.equipoDe(j2).marcadorAcumulado, 0);
+      },
+    );
+
+    test(
+      'pase en falso: regresa true, penaliza +25 al equipo, y el turno igual avanza',
+      () {
+        final jugadores = crearJugadores();
+        final partida = Partida.repartir(jugadores, random: Random(42));
+        final j1 = partida.jugadorEnTurno;
+        partida.jugar(j1, j1.mano.fichas.first);
+
+        final j2 = partida.jugadorEnTurno;
+        final extremo = partida.mesa.extremoIzquierdo!;
+        j2.mano.agregar(Ficha(extremo, 6)); // garantiza jugada legal
+
+        final equipoDeJ2 = partida.equipoDe(j2);
+        final marcadorAntes = equipoDeJ2.marcadorAcumulado;
+        final asientoAntes = j2.asiento;
+
+        final fueFalso = partida.pasar(j2);
+
+        expect(fueFalso, isTrue);
+        expect(equipoDeJ2.marcadorAcumulado, marcadorAntes + 25);
+        expect(partida.jugadorEnTurno.asiento, (asientoAntes % 4) + 1);
+      },
+    );
+  });
+
+  group('Partida - equipoDe()', () {
+    test('identifica correctamente el equipo de cada jugador', () {
       final jugadores = crearJugadores();
       final partida = Partida.repartir(jugadores, random: Random(42));
-      final j1 = partida.jugadorEnTurno;
-      partida.jugar(j1, j1.mano.fichas.first);
 
-      final j2 = partida.jugadorEnTurno;
+      final j1 = jugadores.firstWhere((j) => j.asiento == 1);
+      final j2 = jugadores.firstWhere((j) => j.asiento == 2);
 
-      final fichasOriginales = List.of(j2.mano.fichas);
-      for (final f in fichasOriginales) {
-        j2.mano.quitar(f);
-      }
-      final extremos = {
-        partida.mesa.extremoIzquierdo,
-        partida.mesa.extremoDerecho,
-      };
-      final valorImposible = [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-      ].firstWhere((v) => !extremos.contains(v));
-      j2.mano.agregar(Ficha(valorImposible, valorImposible));
-
-      final asientoAntes = j2.asiento;
-      partida.pasar(j2);
-      expect(partida.jugadorEnTurno.asiento, (asientoAntes % 4) + 1);
-    });
-
-    test('lanza error (pase en falso) si el jugador sí tenía jugada legal', () {
-      final jugadores = crearJugadores();
-      final partida = Partida.repartir(jugadores, random: Random(42));
-      final j1 = partida.jugadorEnTurno;
-      partida.jugar(j1, j1.mano.fichas.first);
-
-      final j2 = partida.jugadorEnTurno;
-      final extremo = partida.mesa.extremoIzquierdo!;
-      j2.mano.agregar(Ficha(extremo, 6));
-
-      expect(() => partida.pasar(j2), throwsStateError);
+      expect(partida.equipoDe(j1), equals(partida.equipoA));
+      expect(partida.equipoDe(j2), equals(partida.equipoB));
     });
   });
 }
