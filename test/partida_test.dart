@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ficha_app/models/ficha.dart';
 import 'package:ficha_app/models/jugador.dart';
 import 'package:ficha_app/models/partida.dart';
+import 'package:ficha_app/models/mesa.dart';
 import 'package:ficha_app/models/resultado_partida.dart';
 
 List<Jugador> crearJugadores() => [
@@ -448,6 +449,44 @@ void main() {
       partida.pasar(j2);
 
       expect(partida.historialPases, isEmpty);
+    });
+  });
+  group('Partida - historialJugadas', () {
+    test('cada jugada queda registrada con jugador, ficha y extremo', () {
+      final jugadores = crearJugadores();
+      final partida = Partida.repartir(jugadores, random: Random(42));
+      final j1 = partida.jugadorEnTurno;
+      final ficha = j1.mano.fichas.first;
+
+      partida.jugar(j1, ficha);
+
+      expect(partida.historialJugadas.length, 1);
+      expect(partida.historialJugadas.first.jugador, equals(j1));
+      expect(partida.historialJugadas.first.ficha, equals(ficha));
+      expect(partida.historialJugadas.first.extremo, isNull); // fue salida
+    });
+
+    test('una jugada normal (no salida) registra el extremo usado', () {
+      final jugadores = crearJugadores();
+      final partida = Partida.repartir(jugadores, random: Random(42));
+      final j1 = partida.jugadorEnTurno;
+      partida.jugar(j1, j1.mano.fichas.first);
+
+      final j2 = partida.jugadorEnTurno;
+      final fichaJugable = j2.mano.fichas.firstWhere(
+        (f) => partida.mesa.sePuedeJugar(f),
+        orElse: () => j2.mano.fichas.first,
+      );
+      if (!partida.mesa.sePuedeJugar(fichaJugable)) return; // caso raro, omitir
+
+      final extremo = fichaJugable.calza(partida.mesa.extremoIzquierdo!)
+          ? Extremo.izquierdo
+          : Extremo.derecho;
+
+      partida.jugar(j2, fichaJugable, extremo: extremo);
+
+      expect(partida.historialJugadas.length, 2);
+      expect(partida.historialJugadas.last.extremo, equals(extremo));
     });
   });
 }

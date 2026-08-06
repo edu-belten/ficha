@@ -4,13 +4,14 @@ import 'equipo.dart';
 import 'ficha.dart';
 import 'jugador.dart';
 import 'mesa.dart';
+import 'registro_jugada.dart';
 import 'registro_pase.dart';
 import 'resultado_partida.dart';
 
 /// Orquesta una partida individual: reparto de fichas, equipos, turno
-/// actual, jugadas, pases (con detección de pase en falso y registro
-/// público de pases legítimos para inferencia), y detección de fin de
-/// partida (dominación o tranca).
+/// actual, jugadas (con registro público de quién jugó qué), pases
+/// (con detección de pase en falso y registro público de pases
+/// legítimos), y detección de fin de partida (dominación o tranca).
 class Partida {
   final List<Jugador> jugadores; // siempre en orden de asiento: 1,2,3,4
   final Mesa mesa;
@@ -20,8 +21,14 @@ class Partida {
 
   /// Historial público de pases legítimos: quién pasó y qué extremos
   /// estaban expuestos en ese momento. Los pases en falso NO se
-  /// agregan aquí. Es la base de la inferencia del nivel Experto.
+  /// agregan aquí. Es la base de la inferencia del nivel Experto (y de
+  /// la memoria parcial de Medio).
   final List<RegistroPase> historialPases = [];
+
+  /// Historial público de jugadas: quién jugó qué ficha y en qué
+  /// extremo. Permite a la IA saber qué palo jugó recientemente su
+  /// compañero, sin necesitar ver su mano.
+  final List<RegistroJugada> historialJugadas = [];
 
   int _asientoEnTurno;
   ResultadoPartida? _resultado;
@@ -174,6 +181,10 @@ class Partida {
       }
       mesa.jugar(ficha, extremo); // lanza error si la ficha no calza
     }
+
+    historialJugadas.add(
+      RegistroJugada(jugador: jugador, ficha: ficha, extremo: extremo),
+    );
 
     jugador.mano.quitar(ficha);
 
