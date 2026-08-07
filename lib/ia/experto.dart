@@ -2,22 +2,30 @@ import 'dart:math';
 
 import '../models/ficha.dart';
 import '../models/mesa.dart';
+import 'analisis_cierre.dart';
+import 'contador_fichas.dart';
 import 'contexto_jugada.dart';
 import 'decision_ia.dart';
 import 'estrategia_ia.dart';
 import 'inferencia_jugadores.dart';
 
-/// Nivel Experto: usa inferencia por pases (información pública) para
-/// saber qué números seguramente NO tiene cada rival (porque pasó
-/// cuando ese número estaba expuesto), y juega activamente:
+/// Nivel Experto: usa el historial público completo de la partida
+/// (pases y jugadas) para razonar con más finura que Medio, sin fallar
+/// nunca por descuido:
 ///
-/// - Prefiere dejar expuesto un número que un RIVAL ya descartó
-///   (lo "ahoga" — no va a poder jugar en ese extremo).
-/// - Evita, cuando puede, dejar expuesto un número que su COMPAÑERO ya
-///   descartó (no le sirve de nada abrirle ese camino).
+/// - **Descartado** (certeza): un rival/compañero pasó cuando ese
+///   número estaba expuesto → seguro no lo tiene.
+/// - **Reforzado** (apuesta calculada, no certeza): un rival/compañero
+///   ya jugó ese número dos o más veces → probablemente tiene más.
+/// - **Agotado + fórmula de 168**: si un número está agotado (nadie
+///   más lo tiene) y la propia mano de Experto está "liviana" respecto
+///   a lo que falta por jugar, forzar el bloqueo conviene; si su mano
+///   está pesada, evitarlo.
+/// - **Rol mano/seguidor**: como criterio de desempate fino, prefiere
+///   soltar bajo si su equipo salió, alto si es seguidor.
 ///
-/// Sin información de pases todavía (ej. inicio de la partida), decide
-/// con el mismo criterio base que Medio.
+/// Sin mesa todavía (salida) no hay extremos que analizar — decide con
+/// el mismo criterio base que Medio.
 class Experto implements EstrategiaIA {
   final Random _random;
 
@@ -33,7 +41,6 @@ class Experto implements EstrategiaIA {
     }
 
     if (contexto.mesa.estaVacia) {
-      // Sin mesa todavía no hay extremos ni pases que analizar.
       return DecisionIA(_elegirSalida(jugables), null);
     }
 
@@ -58,14 +65,28 @@ class Experto implements EstrategiaIA {
     final descartados = InferenciaJugadores.numerosDescartados(
       contexto.historialPases,
     );
+    final reforzados = InferenciaJugadores.numerosReforzados(
+      contexto.historialJugadas,
+    );
 
     final rivalesDescartados = <int>{};
+    final rivalesReforzados = <int>{};
     descartados.forEach((jugador, numeros) {
       if (jugador != contexto.jugador && jugador != contexto.companero) {
         rivalesDescartados.addAll(numeros);
       }
     });
+    reforzados.forEach((jugador, numeros) {
+      if (jugador != contexto.jugador && jugador != contexto.companero) {
+        rivalesReforzados.addAll(numeros);
+      }
+    });
     final companeroDescartados = descartados[contexto.companero] ?? <int>{};
+    final companeroReforzado = reforzados[contexto.companero] ?? <int>{};
+
+    final contador = ContadorFichas(contexto.mano, contexto.mesa);
+    final pintasEnMiMano = contexto.mano.totalPuntos;
+    final pintasYaJugadas = contexto.mesa.totalPintasJugadas;
 
     final izq = contexto.mesa.extremoIzquierdo;
     final der = contexto.mesa.extremoDerecho;
@@ -83,9 +104,31 @@ class Experto implements EstrategiaIA {
         final valorExtremo = extremo == Extremo.izquierdo ? izq! : der!;
         final nuevoNumero = ficha.extremoOpuesto(valorExtremo);
 
-        var puntaje = ficha.valor;
-        if (rivalesDescartados.contains(nuevoNumero)) puntaje += 100;
-        if (companeroDescartados.contains(nuevoNumero)) puntaje -= 50;
+        var puntaje = 0;
+
+        // Descartado (certeza) pesa más que reforzado (apuesta calculada).
+        if (rivalesDescartados.contains(nuevoNumero)) {
+          puntaje += 100;
+        } else if (rivalesReforzados.contains(nuevoNumero)) {
+          puntaje -= 30; // probablemente tiene más, evita regalarle
+        }
+
+        if (companeroDescartados.contains(nuevoNumero)) {
+          puntaje -= 50;
+        } else if (companeroReforzado.contains(nuevoNumero)) {
+          puntaje += 40; // probablemente tiene más, le abres camino
+        }
+
+        // Fórmula de 168: bono o penalización según si conviene
+        // forzar el bloqueo, no un bono ciego como en versiones previas.
+        puntaje += AnalisisCierre.bonoPorAgotado(
+          numeroAgotado: contador.estaAgotado(nuevoNumero),
+          pintasEnMiMano: pintasEnMiMano,
+          pintasYaJugadasEnMesa: pintasYaJugadas,
+        );
+
+        // Rol mano/seguidor como desempate fino.
+        puntaje += contexto.esEquipoMano ? -ficha.valor : ficha.valor;
 
         if (mejor == null ||
             puntaje > mejorPuntaje ||
